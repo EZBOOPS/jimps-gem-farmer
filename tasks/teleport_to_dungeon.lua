@@ -4,7 +4,7 @@ local paths   = require 'core.paths'
 
 local TEMIS_WAYPOINT     = 0x1CE51E  -- Temis waypoint SNO
 local TELEPORT_COOLDOWN  = 12.0      -- seconds between teleport attempts
-local ENTRANCE_RANGE     = 30.0      -- metres — within this = already close enough
+local ENTRANCE_RANGE     = 10.0      -- metres — within this = already close enough
 
 local teleport_time = -1
 

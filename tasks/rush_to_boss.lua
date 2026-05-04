@@ -40,19 +40,6 @@ local function in_wallb_zone(pos)
        and y >= WALLB_Y_MIN and y <= WALLB_Y_MAX
 end
 
--- Wall zone E: X=[125,145] Y=[178,200] — stuck at Y~185, route south toward main path
-local WALLE_X_MIN      = 125.0
-local WALLE_X_MAX      = 145.0
-local WALLE_Y_MIN      = 178.0
-local WALLE_Y_MAX      = 200.0
-local WALLE_BYPASS_POS = vec3:new(112.1143, 126.9102, 0.0068)  -- entry waypoint A (south)
-
-local function in_walle_zone(pos)
-    local x, y = pos:x(), pos:y()
-    return x >= WALLE_X_MIN and x <= WALLE_X_MAX
-       and y >= WALLE_Y_MIN and y <= WALLE_Y_MAX
-end
-
 -- Wall zone C: X=[80,100] Y=[65,88] — bot goes south into wall at Y~75, route west
 local WALLC_X_MIN      = 80.0
 local WALLC_X_MAX      = 100.0
@@ -303,14 +290,6 @@ task.Execute = function()
         BatmobilePlugin.pause(plugin_label)
         task.status = string.format('detouring wall B (%.1fm)', player_pos:dist_to(WALLB_BYPASS_POS))
         pathfinder.request_move(WALLB_BYPASS_POS)
-        return
-    end
-
-    -- Detour around wall zone E (X~134, Y~185) — route south toward main path
-    if in_walle_zone(player_pos) then
-        BatmobilePlugin.pause(plugin_label)
-        task.status = string.format('detouring wall E (%.1fm)', player_pos:dist_to(WALLE_BYPASS_POS))
-        pathfinder.request_move(WALLE_BYPASS_POS)
         return
     end
 

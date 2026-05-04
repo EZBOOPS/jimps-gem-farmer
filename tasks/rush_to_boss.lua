@@ -230,44 +230,37 @@ task.Execute = function()
     -- Healing well — beeline if spotted, otherwise drive to boss coords
     if try_interact_well(player_pos) then return end
 
-    -- Detour around wall zone A (Y~107) — move right to X=50
-    if in_walla_zone(player_pos) then
-        BatmobilePlugin.pause(plugin_label)
-        task.status = string.format('detouring wall A (%.1fm)', player_pos:dist_to(WALLA_BYPASS_POS))
-        pathfinder.request_move(WALLA_BYPASS_POS)
-        return
-    end
-
-    -- Detour around wall zone B (Y~137) — move right to X=73
-    if in_wallb_zone(player_pos) then
-        BatmobilePlugin.pause(plugin_label)
-        task.status = string.format('detouring wall B (%.1fm)', player_pos:dist_to(WALLB_BYPASS_POS))
-        pathfinder.request_move(WALLB_BYPASS_POS)
-        return
-    end
-
-    -- Detour around wall zone C (X~88, Y~75) — avoid south wall, route west
-    if in_wallc_zone(player_pos) then
-        BatmobilePlugin.pause(plugin_label)
-        task.status = string.format('detouring wall C (%.1fm)', player_pos:dist_to(WALLC_BYPASS_POS))
-        pathfinder.request_move(WALLC_BYPASS_POS)
-        return
-    end
-
-    -- Detour around wall zone D (X~161, Y~79) — move east to bypass
-    if in_walld_zone(player_pos) then
-        BatmobilePlugin.pause(plugin_label)
-        task.status = string.format('detouring wall D (%.1fm)', player_pos:dist_to(WALLD_BYPASS_POS))
-        pathfinder.request_move(WALLD_BYPASS_POS)
-        return
-    end
-
-    -- Detour around second wall zone — pause Batmobile and pathfind right
-    if in_wall2_zone(player_pos) then
-        BatmobilePlugin.pause(plugin_label)
-        task.status = string.format('detouring wall2 — moving right (%.1fm)', player_pos:dist_to(WALL2_BYPASS_POS))
-        pathfinder.request_move(WALL2_BYPASS_POS)
-        return
+    if settings.wall_detours then
+        if in_walla_zone(player_pos) then
+            BatmobilePlugin.pause(plugin_label)
+            task.status = string.format('detouring wall A (%.1fm)', player_pos:dist_to(WALLA_BYPASS_POS))
+            pathfinder.request_move(WALLA_BYPASS_POS)
+            return
+        end
+        if in_wallb_zone(player_pos) then
+            BatmobilePlugin.pause(plugin_label)
+            task.status = string.format('detouring wall B (%.1fm)', player_pos:dist_to(WALLB_BYPASS_POS))
+            pathfinder.request_move(WALLB_BYPASS_POS)
+            return
+        end
+        if in_wallc_zone(player_pos) then
+            BatmobilePlugin.pause(plugin_label)
+            task.status = string.format('detouring wall C (%.1fm)', player_pos:dist_to(WALLC_BYPASS_POS))
+            pathfinder.request_move(WALLC_BYPASS_POS)
+            return
+        end
+        if in_walld_zone(player_pos) then
+            BatmobilePlugin.pause(plugin_label)
+            task.status = string.format('detouring wall D (%.1fm)', player_pos:dist_to(WALLD_BYPASS_POS))
+            pathfinder.request_move(WALLD_BYPASS_POS)
+            return
+        end
+        if in_wall2_zone(player_pos) then
+            BatmobilePlugin.pause(plugin_label)
+            task.status = string.format('detouring wall2 (%.1fm)', player_pos:dist_to(WALL2_BYPASS_POS))
+            pathfinder.request_move(WALL2_BYPASS_POS)
+            return
+        end
     end
 
     local boss_dist = player_pos:dist_to(BOSS_POS)

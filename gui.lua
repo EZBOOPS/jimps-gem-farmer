@@ -25,6 +25,8 @@ gui.elements = {
     hard_reset     = slider_int:new(30, 600, 150, get_hash(plugin_label .. '_hard_reset')),
     roam_time      = slider_int:new(1, 30, 5,   get_hash(plugin_label .. '_roam_time')),
 
+    wall_detours       = cb(true, 'wall_detours'),
+
     dbg_tree           = tree_node:new(1),
     show_boss          = cb(false, 'show_boss'),
     dbg_zone           = cb(false, 'dbg_zone'),
@@ -57,6 +59,7 @@ gui.render = function()
         gui.elements.soft_reset:render('Soft reset (s)',    'Seconds without progress before attempting a nav unstick.')
         gui.elements.hard_reset:render('Hard reset (s)',    'Seconds without progress before abandoning the run entirely.')
         gui.elements.roam_time:render('Roam time (s)',      'Seconds of free roam after getting unstuck.')
+        gui.elements.wall_detours:render('Wall detours', 'Enable hardcoded wall zone detours inside the dungeon.')
         gui.elements.run_tree:pop()
     end
 

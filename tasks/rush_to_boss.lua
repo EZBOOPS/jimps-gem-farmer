@@ -71,6 +71,11 @@ local LEFT_ENTRY_X_THRESHOLD = -50.0
 local LEFT_ENTRY_WP_POS      = vec3:new(-17.4170, 108.9404, 0.0430)
 local LEFT_ENTRY_WP_ARRIVE   = 8.0
 
+-- High-Y entry: when spawned at Y > 195, navigate right before heading to boss
+local HIGH_Y_ENTRY_THRESHOLD = 195.0
+local HIGH_Y_ENTRY_WP_POS    = vec3:new(70.7910, 197.7871, 0.0000)
+local HIGH_Y_ENTRY_WP_ARRIVE = 8.0
+
 -- Second wall zone: X=[90,115] Y=[-5,25] — bot must move right to bypass
 local WALL2_X_MIN      = 90.0
 local WALL2_X_MAX      = 115.0
@@ -91,6 +96,8 @@ local task = {
     explore_until         = -1,
     left_entry_wp_needed  = nil,
     left_entry_wp_done    = false,
+    high_y_entry_wp_needed = nil,
+    high_y_entry_wp_done   = false,
     nav_sample_pos        = nil,
     nav_sample_time  = -1,
     free_roam_until  = -1,
@@ -101,8 +108,10 @@ tracker.reset_run = function()
     _orig_reset()
     task.well_done              = false
     task.explore_until          = -1
-    task.left_entry_wp_needed   = nil
-    task.left_entry_wp_done     = false
+    task.left_entry_wp_needed    = nil
+    task.left_entry_wp_done      = false
+    task.high_y_entry_wp_needed  = nil
+    task.high_y_entry_wp_done    = false
     task.nav_sample_pos         = nil
     task.nav_sample_time = -1
     task.free_roam_until = -1
@@ -257,6 +266,29 @@ task.Execute = function()
         else
             task.status = string.format('left entry waypoint (%.1fm)', wp_dist)
             BatmobilePlugin.set_target(plugin_label, LEFT_ENTRY_WP_POS, false)
+            BatmobilePlugin.resume(plugin_label)
+            BatmobilePlugin.update(plugin_label)
+            BatmobilePlugin.move(plugin_label)
+            return
+        end
+    end
+
+    -- High-Y entry: when spawned at Y > 195, go right to waypoint first
+    if task.high_y_entry_wp_needed == nil then
+        task.high_y_entry_wp_needed = player_pos:y() > HIGH_Y_ENTRY_THRESHOLD
+        if task.high_y_entry_wp_needed then
+            console.print('[GemFarmer] High-Y entry detected — navigating to waypoint first')
+        end
+    end
+
+    if task.high_y_entry_wp_needed and not task.high_y_entry_wp_done then
+        local wp_dist = player_pos:dist_to(HIGH_Y_ENTRY_WP_POS)
+        if wp_dist <= HIGH_Y_ENTRY_WP_ARRIVE then
+            task.high_y_entry_wp_done = true
+            console.print('[GemFarmer] High-Y entry waypoint reached — continuing to boss')
+        else
+            task.status = string.format('high-Y entry waypoint (%.1fm)', wp_dist)
+            BatmobilePlugin.set_target(plugin_label, HIGH_Y_ENTRY_WP_POS, false)
             BatmobilePlugin.resume(plugin_label)
             BatmobilePlugin.update(plugin_label)
             BatmobilePlugin.move(plugin_label)

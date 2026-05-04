@@ -14,12 +14,12 @@ local NAV_SAMPLE_INTERVAL = 10.0   -- seconds between position snapshots
 local NAV_STUCK_DIST      = 10.0   -- units — must have moved this far each interval or free-roam
 local NAV_FREE_ROAM_TIME  = 5.0    -- seconds of free roam to escape the stuck spot
 
--- Wall zone A: X=[0,48] Y=[95,120] — stuck around Y~107, move right to X=50
+-- Wall zone A: X=[0,82] Y=[95,120] — stuck around Y~97-107, move right to X=95
 local WALLA_X_MIN      =  0.0
-local WALLA_X_MAX      = 48.0
+local WALLA_X_MAX      = 82.0
 local WALLA_Y_MIN      = 95.0
 local WALLA_Y_MAX      = 120.0
-local WALLA_BYPASS_POS = vec3:new(50.0771, 107.2256, -0.0850)
+local WALLA_BYPASS_POS = vec3:new(95.0, 97.0, 0.0)
 
 local function in_walla_zone(pos)
     local x, y = pos:x(), pos:y()

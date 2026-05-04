@@ -66,6 +66,11 @@ local function in_walld_zone(pos)
        and y >= WALLD_Y_MIN and y <= WALLD_Y_MAX
 end
 
+-- Left-side entry: when spawned at X < -50, navigate to this waypoint before heading to boss
+local LEFT_ENTRY_X_THRESHOLD = -50.0
+local LEFT_ENTRY_WP_POS      = vec3:new(-17.4170, 108.9404, 0.0430)
+local LEFT_ENTRY_WP_ARRIVE   = 8.0
+
 -- Second wall zone: X=[90,115] Y=[-5,25] — bot must move right to bypass
 local WALL2_X_MIN      = 90.0
 local WALL2_X_MAX      = 115.0
@@ -80,11 +85,13 @@ local function in_wall2_zone(pos)
 end
 
 local task = {
-    name             = 'rush_to_boss',
-    status           = 'idle',
-    well_done        = false,
-    explore_until    = -1,
-    nav_sample_pos   = nil,
+    name                  = 'rush_to_boss',
+    status                = 'idle',
+    well_done             = false,
+    explore_until         = -1,
+    left_entry_wp_needed  = nil,
+    left_entry_wp_done    = false,
+    nav_sample_pos        = nil,
     nav_sample_time  = -1,
     free_roam_until  = -1,
 }
@@ -92,9 +99,11 @@ local task = {
 local _orig_reset = tracker.reset_run
 tracker.reset_run = function()
     _orig_reset()
-    task.well_done       = false
-    task.explore_until   = -1
-    task.nav_sample_pos  = nil
+    task.well_done              = false
+    task.explore_until          = -1
+    task.left_entry_wp_needed   = nil
+    task.left_entry_wp_done     = false
+    task.nav_sample_pos         = nil
     task.nav_sample_time = -1
     task.free_roam_until = -1
 end
@@ -231,6 +240,29 @@ task.Execute = function()
 
     -- Healing well — beeline if spotted, otherwise drive to boss coords
     if try_interact_well(player_pos) then return end
+
+    -- Left-side entry: must go to waypoint first before heading to boss
+    if task.left_entry_wp_needed == nil then
+        task.left_entry_wp_needed = player_pos:x() < LEFT_ENTRY_X_THRESHOLD
+        if task.left_entry_wp_needed then
+            console.print('[GemFarmer] Left-side entry detected — navigating to waypoint first')
+        end
+    end
+
+    if task.left_entry_wp_needed and not task.left_entry_wp_done then
+        local wp_dist = player_pos:dist_to(LEFT_ENTRY_WP_POS)
+        if wp_dist <= LEFT_ENTRY_WP_ARRIVE then
+            task.left_entry_wp_done = true
+            console.print('[GemFarmer] Left entry waypoint reached — continuing to boss')
+        else
+            task.status = string.format('left entry waypoint (%.1fm)', wp_dist)
+            BatmobilePlugin.set_target(plugin_label, LEFT_ENTRY_WP_POS, false)
+            BatmobilePlugin.resume(plugin_label)
+            BatmobilePlugin.update(plugin_label)
+            BatmobilePlugin.move(plugin_label)
+            return
+        end
+    end
 
     -- Detour around wall zone A (Y~107) — move right to X=50
     if in_walla_zone(player_pos) then

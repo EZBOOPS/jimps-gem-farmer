@@ -29,11 +29,7 @@ task.shouldExecute = function()
 end
 
 task.Execute = function()
-    -- Keep Batmobile paused while we fight
-    if BatmobilePlugin then
-        BatmobilePlugin.pause(plugin_label)
-        BatmobilePlugin.update(plugin_label)
-    end
+    if BatmobilePlugin == nil then return end
 
     local player = get_local_player()
     if not player then return end
@@ -54,9 +50,13 @@ task.Execute = function()
 
         local dist = player_pos:dist_to(boss:get_position())
         if dist > STAY_RANGE then
-            task.status = 'moving into range'
-            pathfinder.request_move(boss:get_position())
+            task.status = string.format('running to boss (%.1fm)', dist)
+            BatmobilePlugin.set_target(plugin_label, boss:get_position(), false)
+            BatmobilePlugin.resume(plugin_label)
+            BatmobilePlugin.update(plugin_label)
+            BatmobilePlugin.move(plugin_label)
         else
+            BatmobilePlugin.pause(plugin_label)
             task.status = 'in combat'
         end
 
@@ -68,9 +68,12 @@ task.Execute = function()
             task.status = 'boss gone — waiting for loot'
             console.print('[GemFarmer] Boss actor gone — assuming dead')
         else
-            task.status = 'returning to boss area'
+            task.status = string.format('returning to boss area (%.1fm)', tracker.boss_last_pos and player_pos:dist_to(tracker.boss_last_pos) or 0)
             if tracker.boss_last_pos then
-                pathfinder.request_move(tracker.boss_last_pos)
+                BatmobilePlugin.set_target(plugin_label, tracker.boss_last_pos, false)
+                BatmobilePlugin.resume(plugin_label)
+                BatmobilePlugin.update(plugin_label)
+                BatmobilePlugin.move(plugin_label)
             end
         end
     end

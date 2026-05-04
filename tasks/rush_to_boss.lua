@@ -9,6 +9,11 @@ local WELL_INTERACT_RANGE = 6.0    -- metres — interact with healing well
 local BOSS_POS            = vec3:new(5.0742, 6.3398, 1.9697)
 local EXPLORE_AFTER_STUCK = 8.0    -- seconds of free exploration after each escape pause
 
+-- Known wall at ~Y=139: bot must detour left before continuing to boss
+local WALL_STUCK_POS   = vec3:new(8.6982, 139.3350, -1.0850)
+local WALL_BYPASS_POS  = vec3:new(44.0342, 128.4824, 0.0000)
+local WALL_DETECT_DIST = 25.0
+
 local task = {
     name          = 'rush_to_boss',
     status        = 'idle',
@@ -117,7 +122,15 @@ task.Execute = function()
     -- Healing well — beeline if spotted, otherwise drive to boss coords
     if try_interact_well(player_pos) then return end
 
-    -- Batmobile set_target drives toward boss position with wall avoidance
+    -- Detour around known northern wall — pause Batmobile and pathfind left
+    if player_pos:dist_to(WALL_STUCK_POS) <= WALL_DETECT_DIST then
+        BatmobilePlugin.pause(plugin_label)
+        task.status = string.format('detouring wall — moving left (%.1fm)', player_pos:dist_to(WALL_BYPASS_POS))
+        pathfinder.request_move(WALL_BYPASS_POS)
+        return
+    end
+
+    -- Head to boss via Batmobile
     task.status = string.format('heading to boss (%.1fm)', player_pos:dist_to(BOSS_POS))
     BatmobilePlugin.set_target(plugin_label, BOSS_POS, false)
     BatmobilePlugin.resume(plugin_label)

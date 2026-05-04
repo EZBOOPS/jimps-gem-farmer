@@ -8,11 +8,9 @@ local ENTRY_DELAY         = 1.0    -- seconds after entering before starting nav
 local WELL_INTERACT_RANGE = 6.0    -- metres — interact with healing well
 local BOSS_POS            = vec3:new(-5.1768, -3.9268, 2.0000)
 local BOSS_PATHFIND_DIST  = 20.0   -- switch to pathfinder within this range (narrow path)
-local EXPLORE_AFTER_STUCK = 8.0    -- seconds of free exploration after each escape pause
 
 local NAV_SAMPLE_INTERVAL = 10.0   -- seconds between position snapshots
 local NAV_STUCK_DIST      = 10.0   -- units — must have moved this far each interval or free-roam
-local NAV_FREE_ROAM_TIME  = 5.0    -- seconds of free roam to escape the stuck spot
 
 -- Wall zone A: X=[0,82] Y=[95,120] — stuck around Y~97-107, move right to X=95
 local WALLA_X_MIN      =  0.0
@@ -173,7 +171,7 @@ task.Execute = function()
         task.status = string.format('escape pause (%.1fs)', tracker.escape_until - now)
         BatmobilePlugin.pause(plugin_label)
         -- Schedule free exploration after this pause so we don't re-hit the same wall
-        task.explore_until = tracker.escape_until + EXPLORE_AFTER_STUCK
+        task.explore_until = tracker.escape_until + settings.roam_time
         return
     end
 
@@ -224,7 +222,7 @@ task.Execute = function()
         local units_moved = player_pos:dist_to(task.nav_sample_pos)
         if units_moved < NAV_STUCK_DIST then
             console.print(string.format('[GemFarmer] Nav stuck (%.1f units in %.0fs) — free roaming', units_moved, NAV_SAMPLE_INTERVAL))
-            task.free_roam_until = now + NAV_FREE_ROAM_TIME
+            task.free_roam_until = now + settings.roam_time
             task.nav_sample_pos  = nil
             task.nav_sample_time = -1
             BatmobilePlugin.resume(plugin_label)

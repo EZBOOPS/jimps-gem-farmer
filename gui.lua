@@ -17,10 +17,13 @@ gui.elements = {
     keybind_toggle = keybind:new(0x0A, true, get_hash(plugin_label .. '_keybind_toggle')),
 
     run_tree       = tree_node:new(1),
-    loot_wait      = slider_int:new(1, 20, 3,  get_hash(plugin_label .. '_loot_wait')),
+    loot_wait      = slider_int:new(1, 20, 3,   get_hash(plugin_label .. '_loot_wait')),
     boss_range     = slider_int:new(10, 100, 40, get_hash(plugin_label .. '_boss_range')),
-    enter_wait     = slider_int:new(1, 10, 2,  get_hash(plugin_label .. '_enter_wait')),
-    reset_wait     = slider_int:new(1, 10, 1,  get_hash(plugin_label .. '_reset_wait')),
+    enter_wait     = slider_int:new(1, 10, 2,   get_hash(plugin_label .. '_enter_wait')),
+    reset_wait     = slider_int:new(1, 10, 1,   get_hash(plugin_label .. '_reset_wait')),
+    soft_reset     = slider_int:new(5, 120, 30,  get_hash(plugin_label .. '_soft_reset')),
+    hard_reset     = slider_int:new(30, 600, 150, get_hash(plugin_label .. '_hard_reset')),
+    roam_time      = slider_int:new(1, 30, 5,   get_hash(plugin_label .. '_roam_time')),
 
     dbg_tree           = tree_node:new(1),
     show_boss          = cb(false, 'show_boss'),
@@ -47,10 +50,13 @@ gui.render = function()
     end
 
     if gui.elements.run_tree:push('Run Settings') then
-        gui.elements.loot_wait:render('Loot wait (s)',   'Seconds to wait after boss dies before leaving.')
+        gui.elements.loot_wait:render('Loot wait (s)',      'Seconds to wait after boss dies before leaving.')
         gui.elements.boss_range:render('Boss search range (m)', 'Radius to scan for boss actor while exploring.')
-        gui.elements.enter_wait:render('Enter wait (s)', 'Seconds to wait after interacting with the entrance.')
-        gui.elements.reset_wait:render('Reset wait (s)', 'Seconds to wait after resetting the dungeon.')
+        gui.elements.enter_wait:render('Enter wait (s)',    'Seconds to wait after interacting with the entrance.')
+        gui.elements.reset_wait:render('Reset wait (s)',    'Seconds to wait after resetting the dungeon.')
+        gui.elements.soft_reset:render('Soft reset (s)',    'Seconds without progress before attempting a nav unstick.')
+        gui.elements.hard_reset:render('Hard reset (s)',    'Seconds without progress before abandoning the run entirely.')
+        gui.elements.roam_time:render('Roam time (s)',      'Seconds of free roam after getting unstuck.')
         gui.elements.run_tree:pop()
     end
 

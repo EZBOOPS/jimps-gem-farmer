@@ -10,6 +10,9 @@ local settings = {
     enter_wait     = 4,
     reset_wait     = 3,
     show_boss      = false,
+    soft_reset     = 30,
+    hard_reset     = 150,
+    roam_time      = 5,
 }
 
 settings.get_keybind_state = function()
@@ -26,6 +29,9 @@ settings.update_settings = function()
     settings.enter_wait = gui.elements.enter_wait:get()
     settings.reset_wait = gui.elements.reset_wait:get()
     settings.show_boss  = gui.elements.show_boss:get()
+    settings.soft_reset = gui.elements.soft_reset:get()
+    settings.hard_reset = gui.elements.hard_reset:get()
+    settings.roam_time  = gui.elements.roam_time:get()
 end
 
 return settings

@@ -2,9 +2,7 @@ local settings = require 'core.settings'
 local tracker  = require 'core.tracker'
 local world    = require 'core.world'
 
--- No-progress stuck detection (player barely moves at all)
-local SOFT_STUCK_TIME    = 30.0  -- seconds before trying a nav reset
-local STUCK_TIME         = 150.0 -- seconds before abandoning the run (2.5 minutes)
+-- No-progress stuck detection — thresholds read from settings each tick
 local MOVE_THRESHOLD     = 2.0   -- metres — minimum movement to not be "stuck"
 local UNSTICK_COOLDOWN   = 10.0  -- minimum seconds between unstick attempts
 
@@ -126,7 +124,7 @@ stuck_timeout.update = function()
     local stuck_for = now - last_move_time
 
     -- Hard abandon
-    if stuck_for >= STUCK_TIME then
+    if stuck_for >= settings.hard_reset then
         console.print(string.format('[GemFarmer] Stuck for %.0fs — abandoning run', stuck_for))
         reset()
         tracker.boss_dead       = true
@@ -135,7 +133,7 @@ stuck_timeout.update = function()
     end
 
     -- Soft unstick (no progress at all)
-    if stuck_for >= SOFT_STUCK_TIME then
+    if stuck_for >= settings.soft_reset then
         local since_last = (last_unstick_time < 0) and UNSTICK_COOLDOWN or (now - last_unstick_time)
         if since_last >= UNSTICK_COOLDOWN then
             do_unstick(now, string.format('no progress for %.0fs', stuck_for))

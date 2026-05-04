@@ -79,23 +79,11 @@ local function in_wall2_zone(pos)
        and y >= WALL2_Y_MIN and y <= WALL2_Y_MAX
 end
 
--- Alternate entry variants: when spawned at X>60, navigate to a waypoint first
--- Variant A: entry Y <= 150  (e.g. X=97, Y=108)  → waypoint at (112, 127)
--- Variant B: entry Y >  150  (e.g. X=114, Y=197) → waypoint at (107, 214)
-local ENTRY_WP_X_THRESHOLD = 60.0
-local ENTRY_WP_A_POS        = vec3:new(112.1143, 126.9102, 0.0068)
-local ENTRY_WP_B_POS        = vec3:new(107.5254, 214.3545, 0.0000)
-local ENTRY_WP_Y_SPLIT      = 150.0
-local ENTRY_WP_ARRIVE_DIST  = 8.0
-
 local task = {
     name             = 'rush_to_boss',
     status           = 'idle',
     well_done        = false,
     explore_until    = -1,
-    entry_wp_needed  = nil,   -- nil = not checked yet
-    entry_wp_done    = false,
-    entry_wp_target  = nil,   -- set to A or B pos when variant detected
     nav_sample_pos   = nil,
     nav_sample_time  = -1,
     free_roam_until  = -1,
@@ -106,9 +94,6 @@ tracker.reset_run = function()
     _orig_reset()
     task.well_done       = false
     task.explore_until   = -1
-    task.entry_wp_needed = nil
-    task.entry_wp_done   = false
-    task.entry_wp_target = nil
     task.nav_sample_pos  = nil
     task.nav_sample_time = -1
     task.free_roam_until = -1
@@ -246,36 +231,6 @@ task.Execute = function()
 
     -- Healing well — beeline if spotted, otherwise drive to boss coords
     if try_interact_well(player_pos) then return end
-
-    -- Detect entry variant on first navigation tick
-    if task.entry_wp_needed == nil then
-        task.entry_wp_needed = player_pos:x() > ENTRY_WP_X_THRESHOLD
-        if task.entry_wp_needed then
-            if player_pos:y() > ENTRY_WP_Y_SPLIT then
-                task.entry_wp_target = ENTRY_WP_B_POS
-                console.print('[GemFarmer] Alternate entry variant B (Y>150) — navigating to B waypoint')
-            else
-                task.entry_wp_target = ENTRY_WP_A_POS
-                console.print('[GemFarmer] Alternate entry variant A (Y<=150) — navigating to A waypoint')
-            end
-        end
-    end
-
-    -- Alternate entry: navigate to waypoint before main path
-    if task.entry_wp_needed and not task.entry_wp_done then
-        local wp_dist = player_pos:dist_to(task.entry_wp_target)
-        if wp_dist <= ENTRY_WP_ARRIVE_DIST then
-            task.entry_wp_done = true
-            console.print('[GemFarmer] Entry waypoint reached — continuing to boss')
-        else
-            task.status = string.format('entry waypoint (%.1fm)', wp_dist)
-            BatmobilePlugin.set_target(plugin_label, task.entry_wp_target, false)
-            BatmobilePlugin.resume(plugin_label)
-            BatmobilePlugin.update(plugin_label)
-            BatmobilePlugin.move(plugin_label)
-            return
-        end
-    end
 
     -- Detour around wall zone A (Y~107) — move right to X=50
     if in_walla_zone(player_pos) then

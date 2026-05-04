@@ -6,7 +6,7 @@ local plugin_label = 'gem_farmer'
 
 local ENTRY_DELAY         = 1.0    -- seconds after entering before starting navigation
 local WELL_INTERACT_RANGE = 6.0    -- metres — interact with healing well
-local BOSS_POS            = vec3:new(-5.7666, -3.4199, 2.0000)
+local BOSS_POS            = vec3:new(18.0938, 18.8467, -0.8633)
 local BOSS_PATHFIND_DIST  = 40.0   -- switch to pathfinder within this range (narrow path)
 local EXPLORE_AFTER_STUCK = 8.0    -- seconds of free exploration after each escape pause
 

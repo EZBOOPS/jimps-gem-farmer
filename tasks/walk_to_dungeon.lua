@@ -4,7 +4,7 @@ local paths   = require 'core.paths'
 
 local plugin_label    = 'gem_farmer'
 local WAYPOINT_ARRIVE = 12.0   -- metres — advance to next waypoint when this close
-local ENTRANCE_RANGE  = 80.0   -- metres — stop when this close to last waypoint
+local ENTRANCE_RANGE  = 30.0   -- metres — stop when this close to dungeon entrance
 
 local task = {
     name        = 'walk_to_dungeon',

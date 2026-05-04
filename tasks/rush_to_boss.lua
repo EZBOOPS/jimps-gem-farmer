@@ -10,17 +10,30 @@ local BOSS_POS            = vec3:new(-5.7666, -3.4199, 2.0000)
 local BOSS_PATHFIND_DIST  = 40.0   -- switch to pathfinder within this range (narrow path)
 local EXPLORE_AFTER_STUCK = 8.0    -- seconds of free exploration after each escape pause
 
--- Rectangular wall zone: X=[0,35] Y=[95,145] — bot must move left to bypass
-local WALL_X_MIN      =  0.0
-local WALL_X_MAX      = 35.0
-local WALL_Y_MIN      = 95.0
-local WALL_Y_MAX      = 145.0
-local WALL_BYPASS_POS = vec3:new(50.0771, 107.2256, -0.0850)
+-- Wall zone A: X=[0,48] Y=[95,120] — stuck around Y~107, move right to X=50
+local WALLA_X_MIN      =  0.0
+local WALLA_X_MAX      = 48.0
+local WALLA_Y_MIN      = 95.0
+local WALLA_Y_MAX      = 120.0
+local WALLA_BYPASS_POS = vec3:new(50.0771, 107.2256, -0.0850)
 
-local function in_wall_zone(pos)
+local function in_walla_zone(pos)
     local x, y = pos:x(), pos:y()
-    return x >= WALL_X_MIN and x <= WALL_X_MAX
-       and y >= WALL_Y_MIN and y <= WALL_Y_MAX
+    return x >= WALLA_X_MIN and x <= WALLA_X_MAX
+       and y >= WALLA_Y_MIN and y <= WALLA_Y_MAX
+end
+
+-- Wall zone B: X=[0,72] Y=[120,145] — stuck around Y~137, move right to X=73
+local WALLB_X_MIN      =  0.0
+local WALLB_X_MAX      = 72.0
+local WALLB_Y_MIN      = 120.0
+local WALLB_Y_MAX      = 145.0
+local WALLB_BYPASS_POS = vec3:new(73.0527, 137.0479, -0.0723)
+
+local function in_wallb_zone(pos)
+    local x, y = pos:x(), pos:y()
+    return x >= WALLB_X_MIN and x <= WALLB_X_MAX
+       and y >= WALLB_Y_MIN and y <= WALLB_Y_MAX
 end
 
 -- Second wall zone: X=[90,115] Y=[-5,25] — bot must move right to bypass
@@ -36,18 +49,23 @@ local function in_wall2_zone(pos)
        and y >= WALL2_Y_MIN and y <= WALL2_Y_MAX
 end
 
--- Alternate entry variant: when spawned at X>60, navigate to this waypoint first
+-- Alternate entry variants: when spawned at X>60, navigate to a waypoint first
+-- Variant A: entry Y <= 150  (e.g. X=97, Y=108)  → waypoint at (112, 127)
+-- Variant B: entry Y >  150  (e.g. X=114, Y=197) → waypoint at (107, 214)
 local ENTRY_WP_X_THRESHOLD = 60.0
-local ENTRY_WP_POS          = vec3:new(112.1143, 126.9102, 0.0068)
+local ENTRY_WP_A_POS        = vec3:new(112.1143, 126.9102, 0.0068)
+local ENTRY_WP_B_POS        = vec3:new(107.5254, 214.3545, 0.0000)
+local ENTRY_WP_Y_SPLIT      = 150.0
 local ENTRY_WP_ARRIVE_DIST  = 8.0
 
 local task = {
-    name           = 'rush_to_boss',
-    status         = 'idle',
-    well_done      = false,
-    explore_until  = -1,
+    name            = 'rush_to_boss',
+    status          = 'idle',
+    well_done       = false,
+    explore_until   = -1,
     entry_wp_needed = nil,   -- nil = not checked yet
-    entry_wp_done  = false,
+    entry_wp_done   = false,
+    entry_wp_target = nil,   -- set to A or B pos when variant detected
 }
 
 local _orig_reset = tracker.reset_run
@@ -57,6 +75,7 @@ tracker.reset_run = function()
     task.explore_until   = -1
     task.entry_wp_needed = nil
     task.entry_wp_done   = false
+    task.entry_wp_target = nil
 end
 
 local function is_butcher(actor)
@@ -146,6 +165,7 @@ task.Execute = function()
         tracker.boss_found    = true
         tracker.boss_last_pos = boss:get_position()
         BatmobilePlugin.pause(plugin_label)
+        pathfinder.request_move(player_pos)  -- cancel any ongoing final-approach move
         console.print('[GemFarmer] Boss detected — handing off to fight task')
         return
     end
@@ -157,19 +177,25 @@ task.Execute = function()
     if task.entry_wp_needed == nil then
         task.entry_wp_needed = player_pos:x() > ENTRY_WP_X_THRESHOLD
         if task.entry_wp_needed then
-            console.print('[GemFarmer] Alternate entry detected — navigating to entry waypoint first')
+            if player_pos:y() > ENTRY_WP_Y_SPLIT then
+                task.entry_wp_target = ENTRY_WP_B_POS
+                console.print('[GemFarmer] Alternate entry variant B (Y>150) — navigating to B waypoint')
+            else
+                task.entry_wp_target = ENTRY_WP_A_POS
+                console.print('[GemFarmer] Alternate entry variant A (Y<=150) — navigating to A waypoint')
+            end
         end
     end
 
     -- Alternate entry: navigate to waypoint before main path
     if task.entry_wp_needed and not task.entry_wp_done then
-        local wp_dist = player_pos:dist_to(ENTRY_WP_POS)
+        local wp_dist = player_pos:dist_to(task.entry_wp_target)
         if wp_dist <= ENTRY_WP_ARRIVE_DIST then
             task.entry_wp_done = true
             console.print('[GemFarmer] Entry waypoint reached — continuing to boss')
         else
             task.status = string.format('entry waypoint (%.1fm)', wp_dist)
-            BatmobilePlugin.set_target(plugin_label, ENTRY_WP_POS, false)
+            BatmobilePlugin.set_target(plugin_label, task.entry_wp_target, false)
             BatmobilePlugin.resume(plugin_label)
             BatmobilePlugin.update(plugin_label)
             BatmobilePlugin.move(plugin_label)
@@ -177,11 +203,19 @@ task.Execute = function()
         end
     end
 
-    -- Detour around known wall zone — pause Batmobile and pathfind left
-    if in_wall_zone(player_pos) then
+    -- Detour around wall zone A (Y~107) — move right to X=50
+    if in_walla_zone(player_pos) then
         BatmobilePlugin.pause(plugin_label)
-        task.status = string.format('detouring wall — moving left (%.1fm)', player_pos:dist_to(WALL_BYPASS_POS))
-        pathfinder.request_move(WALL_BYPASS_POS)
+        task.status = string.format('detouring wall A (%.1fm)', player_pos:dist_to(WALLA_BYPASS_POS))
+        pathfinder.request_move(WALLA_BYPASS_POS)
+        return
+    end
+
+    -- Detour around wall zone B (Y~137) — move right to X=73
+    if in_wallb_zone(player_pos) then
+        BatmobilePlugin.pause(plugin_label)
+        task.status = string.format('detouring wall B (%.1fm)', player_pos:dist_to(WALLB_BYPASS_POS))
+        pathfinder.request_move(WALLB_BYPASS_POS)
         return
     end
 

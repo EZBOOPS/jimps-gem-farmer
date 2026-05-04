@@ -6,7 +6,6 @@ local plugin_label = 'gem_farmer'
 
 local ENTRY_DELAY         = 2.0   -- seconds after entering before starting navigation
 local WELL_INTERACT_RANGE = 6.0   -- metres — interact with healing well
-local WELL_SEEK_RANGE     = 18.0  -- metres — start walking toward well
 
 local task = {
     name      = 'rush_to_boss',
@@ -36,8 +35,9 @@ local function find_boss(player_pos)
     return nil
 end
 
+-- Returns true if the well was found (caller should skip Batmobile exploration)
 local function try_interact_well(player_pos)
-    if task.well_done then return end
+    if task.well_done then return false end
     for _, actor in ipairs(actors_manager.get_all_actors()) do
         local name = actor:get_skin_name() or ''
         if name == 'Healing_Well_Basic' then
@@ -46,12 +46,17 @@ local function try_interact_well(player_pos)
                 console.print(string.format('[GemFarmer] Interacting with Healing_Well_Basic (%.1fm)', dist))
                 interact_object(actor)
                 task.well_done = true
-            elseif dist <= WELL_SEEK_RANGE then
+                return false  -- done, resume exploration
+            else
+                -- Pause Batmobile and beeline directly to the well
+                BatmobilePlugin.pause(plugin_label)
                 pathfinder.request_move(actor:get_position())
+                task.status = string.format('beelining to healing well (%.1fm)', dist)
+                return true
             end
-            return
         end
     end
+    return false
 end
 
 task.shouldExecute = function()
@@ -91,8 +96,8 @@ task.Execute = function()
         return
     end
 
-    -- Healing well — interact opportunistically while exploring
-    try_interact_well(player_pos)
+    -- Healing well — beeline if spotted, otherwise keep exploring
+    if try_interact_well(player_pos) then return end
 
     -- Free Batmobile exploration handles all wall routing
     task.status = 'exploring dungeon'

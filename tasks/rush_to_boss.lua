@@ -4,20 +4,23 @@ local world        = require 'core.world'
 
 local plugin_label = 'gem_farmer'
 
-local ENTRY_DELAY         = 2.0   -- seconds after entering before starting navigation
-local WELL_INTERACT_RANGE = 6.0   -- metres — interact with healing well
+local ENTRY_DELAY         = 2.0    -- seconds after entering before starting navigation
+local WELL_INTERACT_RANGE = 6.0    -- metres — interact with healing well
 local BOSS_POS            = vec3:new(5.0742, 6.3398, 1.9697)
+local EXPLORE_AFTER_STUCK = 8.0    -- seconds of free exploration after each escape pause
 
 local task = {
-    name      = 'rush_to_boss',
-    status    = 'idle',
-    well_done = false,
+    name          = 'rush_to_boss',
+    status        = 'idle',
+    well_done     = false,
+    explore_until = -1,
 }
 
 local _orig_reset = tracker.reset_run
 tracker.reset_run = function()
     _orig_reset()
-    task.well_done = false
+    task.well_done     = false
+    task.explore_until = -1
 end
 
 local function is_butcher(actor)
@@ -75,7 +78,21 @@ task.Execute = function()
     if tracker.escape_until > 0 and now < tracker.escape_until then
         task.status = string.format('escape pause (%.1fs)', tracker.escape_until - now)
         BatmobilePlugin.pause(plugin_label)
+        -- Schedule free exploration after this pause so we don't re-hit the same wall
+        task.explore_until = tracker.escape_until + EXPLORE_AFTER_STUCK
         return
+    end
+
+    -- After an escape pause, free-explore briefly to route around the obstacle
+    if task.explore_until > 0 then
+        if now < task.explore_until then
+            task.status = string.format('routing around obstacle (%.1fs)', task.explore_until - now)
+            BatmobilePlugin.resume(plugin_label)
+            BatmobilePlugin.update(plugin_label)
+            BatmobilePlugin.move(plugin_label)
+            return
+        end
+        task.explore_until = -1
     end
 
     if tracker.enter_time > 0 and (now - tracker.enter_time) < ENTRY_DELAY then

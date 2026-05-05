@@ -13,7 +13,18 @@ local task = {
 }
 
 task.shouldExecute = function()
-    return world.is_outside() and tracker.boss_dead
+    if not world.is_outside() then return false end
+    if not tracker.boss_dead then return false end
+
+    -- Wait for Alfred to finish inventory management before resetting
+    if AlfredTheButlerPlugin then
+        local status = AlfredTheButlerPlugin.get_status()
+        if status and (status.need_trigger or status.inventory_full or status.need_repair) then
+            return false
+        end
+    end
+
+    return true
 end
 
 task.Execute = function()

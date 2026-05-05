@@ -15,6 +15,12 @@ local OSC_COOLDOWN       = 15.0  -- minimum seconds between oscillation fixes
 
 local PLUGIN_LABEL = 'gem_farmer'
 
+-- Boss progress detection — abandon if not getting closer to boss
+local BOSS_POS               = vec3:new(-5.1768, -3.9268, 2.0000)
+local BOSS_PROGRESS_INTERVAL = 15.0  -- check every 15 seconds
+local BOSS_PROGRESS_MIN      = 5.0   -- must get at least 5m closer
+local BOSS_MAX_NO_PROGRESS   = 90.0  -- abandon after 90s of no progress toward boss
+
 -- No-progress state
 local last_pos          = nil
 local last_move_time    = -1
@@ -25,6 +31,11 @@ local osc_history       = {}   -- {t, pos} samples
 local last_sample_time  = -1
 local last_osc_fix_time = -1
 
+-- Boss progress state
+local boss_check_time     = -1
+local boss_best_dist      = 9999
+local boss_no_progress_since = -1
+
 local function reset()
     last_pos          = nil
     last_move_time    = -1
@@ -32,6 +43,9 @@ local function reset()
     osc_history       = {}
     last_sample_time  = -1
     last_osc_fix_time = -1
+    boss_check_time     = -1
+    boss_best_dist      = 9999
+    boss_no_progress_since = -1
 end
 
 local function do_unstick(now, reason)
@@ -104,6 +118,30 @@ stuck_timeout.update = function()
     if not player then return end
     local player_pos = player:get_position()
     local now        = get_time_since_inject()
+
+    -- Boss progress check — abandon if not getting closer over time
+    local boss_dist = player_pos:dist_to(BOSS_POS)
+    if boss_check_time < 0 then
+        boss_check_time = now
+        boss_best_dist  = boss_dist
+        boss_no_progress_since = now
+    elseif (now - boss_check_time) >= BOSS_PROGRESS_INTERVAL then
+        if boss_dist < (boss_best_dist - BOSS_PROGRESS_MIN) then
+            -- Making progress toward boss
+            boss_best_dist = boss_dist
+            boss_no_progress_since = now
+        end
+        boss_check_time = now
+
+        local no_progress_for = now - boss_no_progress_since
+        if no_progress_for >= BOSS_MAX_NO_PROGRESS then
+            console.print(string.format('[GemFarmer] No progress toward boss for %.0fs (dist=%.1fm) — abandoning run', no_progress_for, boss_dist))
+            reset()
+            tracker.boss_dead       = true
+            tracker.loot_start_time = get_time_since_inject() - settings.loot_wait - 1
+            return
+        end
+    end
 
     -- Wall-oscillation check (runs every tick, samples internally at OSC_SAMPLE_RATE)
     check_oscillation(now, player_pos)

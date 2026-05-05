@@ -39,7 +39,18 @@ local function find_dungeon_entrance(player_pos)
 end
 
 task.shouldExecute = function()
-    return world.is_outside() and not tracker.boss_dead
+    if not world.is_outside() then return false end
+    if tracker.boss_dead then return false end
+
+    -- Wait for Alfred to finish inventory management before entering
+    if AlfredTheButlerPlugin then
+        local status = AlfredTheButlerPlugin.get_status()
+        if status and (status.need_trigger or status.inventory_full or status.need_repair) then
+            return false
+        end
+    end
+
+    return true
 end
 
 task.Execute = function()

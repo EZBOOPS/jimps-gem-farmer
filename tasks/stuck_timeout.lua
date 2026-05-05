@@ -21,6 +21,14 @@ local BOSS_PROGRESS_INTERVAL = 15.0  -- check every 15 seconds
 local BOSS_PROGRESS_MIN      = 5.0   -- must get at least 5m closer
 local BOSS_MAX_NO_PROGRESS   = 90.0  -- abandon after 90s of no progress toward boss
 
+-- Wall-slide: when stuck, move perpendicular to the boss direction to follow the
+-- wall contour until a clear path opens up. Each tick we re-project the slide
+-- target from the player's current position so the bot naturally arcs around
+-- corners. SLIDE_DIST is how far ahead to aim; SLIDE_DURATION caps how long we
+-- slide before giving up and letting the boss-progress guard handle abandonment.
+local SLIDE_DIST     = 12.0  -- units ahead along the slide direction
+local SLIDE_DURATION = 8.0   -- seconds to slide before reverting to normal nav
+
 -- No-progress state
 local last_pos          = nil
 local last_move_time    = -1
@@ -32,8 +40,8 @@ local last_sample_time  = -1
 local last_osc_fix_time = -1
 
 -- Boss progress state
-local boss_check_time     = -1
-local boss_best_dist      = 9999
+local boss_check_time        = -1
+local boss_best_dist         = 9999
 local boss_no_progress_since = -1
 
 local function reset()
@@ -43,24 +51,85 @@ local function reset()
     osc_history       = {}
     last_sample_time  = -1
     last_osc_fix_time = -1
-    boss_check_time     = -1
-    boss_best_dist      = 9999
+    boss_check_time        = -1
+    boss_best_dist         = 9999
     boss_no_progress_since = -1
 end
 
-local function do_unstick(now, reason)
-    console.print(string.format('[GemFarmer] Wall unstick: %s — pausing nav for 3s', reason))
+-- ── Wall-slide state (read by rush_to_boss) ─────────────────────────────────
+-- slide_until > 0 means a slide is active. slide_dir is +1 (left perp) or -1
+-- (right perp), chosen once when the slide starts and held for the whole slide
+-- so we don't oscillate between sides.
+local stuck_timeout = {}
+stuck_timeout.slide_until = -1   -- wall-slide active while now < slide_until
+stuck_timeout.slide_dir   = 1    -- +1 = left perp, -1 = right perp
+
+-- Compute the wall-slide target for this tick. Called every tick by rush_to_boss
+-- while slide_until is active. Returns a vec3 the caller should pathfinder-move to.
+-- Re-projects each tick so the slide naturally arcs around corners.
+function stuck_timeout.get_slide_target(player_pos)
+    -- Direction from player toward boss (2D, normalised)
+    local dx = BOSS_POS:x() - player_pos:x()
+    local dy = BOSS_POS:y() - player_pos:y()
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len < 0.001 then len = 0.001 end
+    dx = dx / len
+    dy = dy / len
+
+    -- Perpendicular: left (+1) = (-dy, dx), right (-1) = (dy, -dx)
+    local d = stuck_timeout.slide_dir
+    local px = -dy * d
+    local py =  dx * d
+
+    local tx = player_pos:x() + px * SLIDE_DIST
+    local ty = player_pos:y() + py * SLIDE_DIST
+    local target = vec3:new(tx, ty, player_pos:z())
+    return utility.set_height_of_valid_position(target)
+end
+
+function stuck_timeout.pick_slide_dir(player_pos)
+    -- Try left perp first; if that walkability probe fails try right.
+    -- "Biased toward boss" tiebreak: whichever side has a walkable point AND
+    -- is not moving directly away from boss wins. In practice the wall is on
+    -- one side so only one perp will be walkable.
+    local dx = BOSS_POS:x() - player_pos:x()
+    local dy = BOSS_POS:y() - player_pos:y()
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len < 0.001 then return 1 end
+    dx = dx / len
+    dy = dy / len
+
+    for _, d in ipairs({ 1, -1 }) do
+        local px = -dy * d
+        local py =  dx * d
+        local probe = vec3:new(
+            player_pos:x() + px * SLIDE_DIST * 0.5,
+            player_pos:y() + py * SLIDE_DIST * 0.5,
+            player_pos:z())
+        probe = utility.set_height_of_valid_position(probe)
+        if utility.is_point_walkeable(probe) then
+            return d
+        end
+    end
+    return 1  -- fallback
+end
+
+local function do_unstick(now, reason, player_pos)
+    console.print(string.format('[GemFarmer] Wall unstick: %s — wall-sliding for %.0fs', reason, SLIDE_DURATION))
     tracker.healing_well_pos = nil
-    tracker.escape_until     = now + 3.0
+    tracker.escape_until     = -1  -- don't use the old pause; slide takes over immediately
     if BatmobilePlugin then
         BatmobilePlugin.clear_target(PLUGIN_LABEL)
         BatmobilePlugin.pause(PLUGIN_LABEL)
     end
     last_unstick_time = now
     last_osc_fix_time = now
-    -- Reset oscillation history so we don't re-trigger immediately
     osc_history      = {}
     last_sample_time = -1
+
+    -- Pick slide direction based on what's walkable from here
+    stuck_timeout.slide_dir   = stuck_timeout.pick_slide_dir(player_pos)
+    stuck_timeout.slide_until = now + SLIDE_DURATION
 end
 
 local function check_oscillation(now, player_pos)
@@ -93,7 +162,7 @@ local function check_oscillation(now, player_pos)
     if total >= OSC_TOTAL_MIN and net <= OSC_NET_MAX then
         local since_last = (last_osc_fix_time < 0) and OSC_COOLDOWN or (now - last_osc_fix_time)
         if since_last >= OSC_COOLDOWN then
-            do_unstick(now, string.format('oscillating (moved %.1fm, net %.2fm)', total, net))
+            do_unstick(now, string.format('oscillating (moved %.1fm, net %.2fm)', total, net), player_pos)
         end
     end
 end
@@ -103,15 +172,17 @@ local _orig_reset = tracker.reset_run
 tracker.reset_run = function()
     _orig_reset()
     reset()
+    stuck_timeout.slide_until = -1
+    stuck_timeout.slide_dir   = 1
 end
-
-local stuck_timeout = {}
 
 stuck_timeout.update = function()
     -- Only monitor while inside, exploring, and not already done
     if not world.is_inside() then reset() return end
     if tracker.boss_found or tracker.boss_dead then reset() return end
-    -- Don't fire while we're already in an escape pause
+    -- Don't fire while we're already wall-sliding (rush_to_boss drives movement)
+    if stuck_timeout.slide_until > 0 and get_time_since_inject() < stuck_timeout.slide_until then return end
+    -- Don't fire while in a legacy escape pause
     if tracker.escape_until > 0 and get_time_since_inject() < tracker.escape_until then return end
 
     local player = get_local_player()
@@ -122,13 +193,12 @@ stuck_timeout.update = function()
     -- Boss progress check — abandon if not getting closer over time
     local boss_dist = player_pos:dist_to(BOSS_POS)
     if boss_check_time < 0 then
-        boss_check_time = now
-        boss_best_dist  = boss_dist
+        boss_check_time        = now
+        boss_best_dist         = boss_dist
         boss_no_progress_since = now
     elseif (now - boss_check_time) >= BOSS_PROGRESS_INTERVAL then
         if boss_dist < (boss_best_dist - BOSS_PROGRESS_MIN) then
-            -- Making progress toward boss
-            boss_best_dist = boss_dist
+            boss_best_dist         = boss_dist
             boss_no_progress_since = now
         end
         boss_check_time = now
@@ -137,6 +207,7 @@ stuck_timeout.update = function()
         if no_progress_for >= BOSS_MAX_NO_PROGRESS then
             console.print(string.format('[GemFarmer] No progress toward boss for %.0fs (dist=%.1fm) — abandoning run', no_progress_for, boss_dist))
             reset()
+            stuck_timeout.slide_until = -1
             tracker.boss_dead       = true
             tracker.loot_start_time = get_time_since_inject() - settings.loot_wait - 1
             return
@@ -165,16 +236,17 @@ stuck_timeout.update = function()
     if stuck_for >= settings.hard_reset then
         console.print(string.format('[GemFarmer] Stuck for %.0fs — abandoning run', stuck_for))
         reset()
+        stuck_timeout.slide_until = -1
         tracker.boss_dead       = true
         tracker.loot_start_time = get_time_since_inject() - settings.loot_wait - 1
         return
     end
 
-    -- Soft unstick (no progress at all)
+    -- Soft unstick — start wall-slide instead of blind free-roam
     if stuck_for >= settings.soft_reset then
         local since_last = (last_unstick_time < 0) and UNSTICK_COOLDOWN or (now - last_unstick_time)
         if since_last >= UNSTICK_COOLDOWN then
-            do_unstick(now, string.format('no progress for %.0fs', stuck_for))
+            do_unstick(now, string.format('no progress for %.0fs', stuck_for), player_pos)
         end
     end
 end

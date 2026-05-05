@@ -1,6 +1,7 @@
-local settings     = require 'core.settings'
-local tracker      = require 'core.tracker'
-local world        = require 'core.world'
+local settings      = require 'core.settings'
+local tracker       = require 'core.tracker'
+local world         = require 'core.world'
+local stuck_timeout = require 'tasks.stuck_timeout'
 
 local plugin_label = 'gem_farmer'
 
@@ -78,23 +79,19 @@ local function in_wall2_zone(pos)
 end
 
 local task = {
-    name                  = 'rush_to_boss',
-    status                = 'idle',
+    name             = 'rush_to_boss',
+    status           = 'idle',
     well_done        = false,
-    explore_until    = -1,
     nav_sample_pos   = nil,
     nav_sample_time  = -1,
-    free_roam_until  = -1,
 }
 
 local _orig_reset = tracker.reset_run
 tracker.reset_run = function()
     _orig_reset()
-    task.well_done       = false
-    task.explore_until   = -1
+    task.well_done      = false
     task.nav_sample_pos  = nil
     task.nav_sample_time = -1
-    task.free_roam_until = -1
 end
 
 local function is_butcher(actor)
@@ -149,41 +146,30 @@ task.Execute = function()
 
     local now = get_time_since_inject()
 
-    if tracker.escape_until > 0 and now < tracker.escape_until then
-        task.status = string.format('escape pause (%.1fs)', tracker.escape_until - now)
-        BatmobilePlugin.pause(plugin_label)
-        -- Schedule free exploration after this pause so we don't re-hit the same wall
-        task.explore_until = tracker.escape_until + settings.roam_time
-        return
-    end
-
-    -- After an escape pause, free-explore briefly to route around the obstacle
-    if task.explore_until > 0 then
-        if now < task.explore_until then
-            task.status = string.format('routing around obstacle (%.1fs)', task.explore_until - now)
-            BatmobilePlugin.resume(plugin_label)
-            BatmobilePlugin.update(plugin_label)
-            BatmobilePlugin.move(plugin_label)
-            task.nav_sample_pos  = nil   -- reset so stuck check starts fresh after explore
-            task.nav_sample_time = -1
-            return
+    -- Wall-slide: active when stuck_timeout detected oscillation or no-progress.
+    -- Each tick we re-project a perpendicular target from the player's current
+    -- position so the slide naturally arcs around corners rather than aiming at
+    -- a single fixed point that may itself be blocked.
+    if stuck_timeout.slide_until > 0 and now < stuck_timeout.slide_until then
+        local player_s = get_local_player()
+        if player_s then
+            local slide_target = stuck_timeout.get_slide_target(player_s:get_position())
+            local remaining    = stuck_timeout.slide_until - now
+            task.status = string.format('wall-sliding (%.1fs, dir=%+d)', remaining, stuck_timeout.slide_dir)
+            BatmobilePlugin.pause(plugin_label)
+            pathfinder.request_move(slide_target)
         end
-        task.explore_until = -1
-    end
-
-    -- Free-roam unstick triggered by nav stuck detection
-    if task.free_roam_until > 0 then
-        if now < task.free_roam_until then
-            task.status = string.format('free roam unstuck (%.1fs)', task.free_roam_until - now)
-            BatmobilePlugin.resume(plugin_label)
-            BatmobilePlugin.update(plugin_label)
-            BatmobilePlugin.move(plugin_label)
-            return
-        end
-        task.free_roam_until = -1
+        -- Reset nav sample so stuck-check starts fresh after slide ends
         task.nav_sample_pos  = nil
         task.nav_sample_time = -1
-        console.print('[GemFarmer] Free roam done — resuming boss path')
+        return
+    end
+    if stuck_timeout.slide_until > 0 and now >= stuck_timeout.slide_until then
+        -- Slide just finished
+        stuck_timeout.slide_until = -1
+        task.nav_sample_pos  = nil
+        task.nav_sample_time = -1
+        console.print('[GemFarmer] Wall-slide done — resuming boss path')
     end
 
     if tracker.enter_time > 0 and (now - tracker.enter_time) < ENTRY_DELAY then
@@ -196,20 +182,18 @@ task.Execute = function()
     local player_pos = player:get_position()
 
     -- Nav stuck detection: snapshot position every NAV_SAMPLE_INTERVAL seconds.
-    -- If less than NAV_STUCK_DIST units moved since last snapshot → free-roam to unstick.
+    -- If less than NAV_STUCK_DIST units moved → trigger wall-slide via stuck_timeout.
     if task.nav_sample_pos == nil then
         task.nav_sample_pos  = player_pos
         task.nav_sample_time = now
     elseif (now - task.nav_sample_time) >= NAV_SAMPLE_INTERVAL then
         local units_moved = player_pos:dist_to(task.nav_sample_pos)
         if units_moved < NAV_STUCK_DIST then
-            console.print(string.format('[GemFarmer] Nav stuck (%.1f units in %.0fs) — free roaming', units_moved, NAV_SAMPLE_INTERVAL))
-            task.free_roam_until = now + settings.roam_time
+            console.print(string.format('[GemFarmer] Nav stuck (%.1f units in %.0fs) — starting wall-slide', units_moved, NAV_SAMPLE_INTERVAL))
+            stuck_timeout.slide_dir   = stuck_timeout.pick_slide_dir(player_pos)
+            stuck_timeout.slide_until = now + settings.roam_time
             task.nav_sample_pos  = nil
             task.nav_sample_time = -1
-            BatmobilePlugin.resume(plugin_label)
-            BatmobilePlugin.update(plugin_label)
-            BatmobilePlugin.move(plugin_label)
             return
         end
         task.nav_sample_pos  = player_pos

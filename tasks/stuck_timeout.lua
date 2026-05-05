@@ -26,8 +26,7 @@ local BOSS_MAX_NO_PROGRESS   = 90.0  -- abandon after 90s of no progress toward 
 -- target from the player's current position so the bot naturally arcs around
 -- corners. SLIDE_DIST is how far ahead to aim; SLIDE_DURATION caps how long we
 -- slide before giving up and letting the boss-progress guard handle abandonment.
-local SLIDE_DIST     = 12.0  -- units ahead along the slide direction
--- SLIDE_DURATION is read from settings.slide_duration each time a slide starts
+-- Unstick duration is read from settings.slide_duration each time it fires
 
 -- No-progress state
 local last_pos          = nil
@@ -56,68 +55,14 @@ local function reset()
     boss_no_progress_since = -1
 end
 
--- ── Wall-slide state (read by rush_to_boss) ─────────────────────────────────
--- slide_until > 0 means a slide is active. slide_dir is +1 (left perp) or -1
--- (right perp), chosen once when the slide starts and held for the whole slide
--- so we don't oscillate between sides.
+-- slide_until > 0 means an unstick free-roam is active (read by rush_to_boss)
 local stuck_timeout = {}
-stuck_timeout.slide_until = -1   -- wall-slide active while now < slide_until
-stuck_timeout.slide_dir   = 1    -- +1 = left perp, -1 = right perp
+stuck_timeout.slide_until = -1
 
--- Compute the wall-slide target for this tick. Called every tick by rush_to_boss
--- while slide_until is active. Returns a vec3 the caller should pathfinder-move to.
--- Re-projects each tick so the slide naturally arcs around corners.
-function stuck_timeout.get_slide_target(player_pos)
-    -- Direction from player toward boss (2D, normalised)
-    local dx = BOSS_POS:x() - player_pos:x()
-    local dy = BOSS_POS:y() - player_pos:y()
-    local len = math.sqrt(dx * dx + dy * dy)
-    if len < 0.001 then len = 0.001 end
-    dx = dx / len
-    dy = dy / len
-
-    -- Perpendicular: left (+1) = (-dy, dx), right (-1) = (dy, -dx)
-    local d = stuck_timeout.slide_dir
-    local px = -dy * d
-    local py =  dx * d
-
-    local tx = player_pos:x() + px * SLIDE_DIST
-    local ty = player_pos:y() + py * SLIDE_DIST
-    local target = vec3:new(tx, ty, player_pos:z())
-    return utility.set_height_of_valid_position(target)
-end
-
-function stuck_timeout.pick_slide_dir(player_pos)
-    -- Try left perp first; if that walkability probe fails try right.
-    -- "Biased toward boss" tiebreak: whichever side has a walkable point AND
-    -- is not moving directly away from boss wins. In practice the wall is on
-    -- one side so only one perp will be walkable.
-    local dx = BOSS_POS:x() - player_pos:x()
-    local dy = BOSS_POS:y() - player_pos:y()
-    local len = math.sqrt(dx * dx + dy * dy)
-    if len < 0.001 then return 1 end
-    dx = dx / len
-    dy = dy / len
-
-    for _, d in ipairs({ 1, -1 }) do
-        local px = -dy * d
-        local py =  dx * d
-        local probe = vec3:new(
-            player_pos:x() + px * SLIDE_DIST * 0.5,
-            player_pos:y() + py * SLIDE_DIST * 0.5,
-            player_pos:z())
-        probe = utility.set_height_of_valid_position(probe)
-        if utility.is_point_walkeable(probe) then
-            return d
-        end
-    end
-    return 1  -- fallback
-end
-
-local function do_unstick(now, reason, player_pos)
-    console.print(string.format('[GemFarmer] Wall unstick: %s — wall-sliding for %.0fs', reason, settings.slide_duration))
+local function do_unstick(now, reason)
+    console.print(string.format('[GemFarmer] Unstick: %s — free-roaming for %.0fs', reason, settings.slide_duration))
     tracker.healing_well_pos = nil
-    tracker.escape_until     = -1  -- don't use the old pause; slide takes over immediately
+    tracker.escape_until     = -1
     if BatmobilePlugin then
         BatmobilePlugin.clear_target(PLUGIN_LABEL)
         BatmobilePlugin.pause(PLUGIN_LABEL)
@@ -126,9 +71,6 @@ local function do_unstick(now, reason, player_pos)
     last_osc_fix_time = now
     osc_history      = {}
     last_sample_time = -1
-
-    -- Pick slide direction based on what's walkable from here
-    stuck_timeout.slide_dir   = stuck_timeout.pick_slide_dir(player_pos)
     stuck_timeout.slide_until = now + settings.slide_duration
 end
 
@@ -162,7 +104,7 @@ local function check_oscillation(now, player_pos)
     if total >= OSC_TOTAL_MIN and net <= OSC_NET_MAX then
         local since_last = (last_osc_fix_time < 0) and OSC_COOLDOWN or (now - last_osc_fix_time)
         if since_last >= OSC_COOLDOWN then
-            do_unstick(now, string.format('oscillating (moved %.1fm, net %.2fm)', total, net), player_pos)
+            do_unstick(now, string.format('oscillating (moved %.1fm, net %.2fm)', total, net))
         end
     end
 end
@@ -173,7 +115,6 @@ tracker.reset_run = function()
     _orig_reset()
     reset()
     stuck_timeout.slide_until = -1
-    stuck_timeout.slide_dir   = 1
 end
 
 stuck_timeout.update = function()
@@ -246,7 +187,7 @@ stuck_timeout.update = function()
     if stuck_for >= settings.soft_reset then
         local since_last = (last_unstick_time < 0) and UNSTICK_COOLDOWN or (now - last_unstick_time)
         if since_last >= UNSTICK_COOLDOWN then
-            do_unstick(now, string.format('no progress for %.0fs', stuck_for), player_pos)
+            do_unstick(now, string.format('no progress for %.0fs', stuck_for))
         end
     end
 end

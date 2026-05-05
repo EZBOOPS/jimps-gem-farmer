@@ -13,15 +13,6 @@ local BOSS_PATHFIND_DIST  = 20.0   -- switch to pathfinder within this range (na
 local NAV_SAMPLE_INTERVAL = 6.0    -- seconds between position snapshots
 local NAV_STUCK_DIST      = 10.0   -- units — must have moved this far each interval or free-roam
 
--- Slide re-steer: if the player hasn't moved this far within SLIDE_STUCK_TIME
--- seconds during an active wall-slide, the slide target is blocked by a new wall
--- corner. Fan out angles from the current slide direction to find a walkable exit.
-local SLIDE_STUCK_TIME  = 1.5   -- seconds of no movement before re-steering
-local SLIDE_STUCK_DIST  = 1.5   -- units — minimum movement to count as "not stuck"
-local SLIDE_FAN_STEP    = 15    -- degrees per fan step
-local SLIDE_FAN_MAX     = 180   -- max degrees to fan either side before giving up
-local SLIDE_PROBE_DIST  = 8.0   -- units — how far ahead to probe walkability
-
 -- Wall zone A: X=[0,82] Y=[95,120] — stuck around Y~97-107, move right to X=95
 local WALLA_X_MIN      =  0.0
 local WALLA_X_MAX      = 82.0
@@ -93,19 +84,14 @@ local task = {
     well_done        = false,
     nav_sample_pos   = nil,
     nav_sample_time  = -1,
-    -- Slide re-steer state
-    slide_last_pos       = nil,
-    slide_last_move_time = -1,
 }
 
 local _orig_reset = tracker.reset_run
 tracker.reset_run = function()
     _orig_reset()
-    task.well_done           = false
-    task.nav_sample_pos      = nil
-    task.nav_sample_time     = -1
-    task.slide_last_pos      = nil
-    task.slide_last_move_time = -1
+    task.well_done      = false
+    task.nav_sample_pos  = nil
+    task.nav_sample_time = -1
 end
 
 local function is_butcher(actor)
@@ -160,109 +146,22 @@ task.Execute = function()
 
     local now = get_time_since_inject()
 
-    -- Wall-slide: active when stuck_timeout detected oscillation or no-progress.
-    -- Each tick we re-project a perpendicular target from the current position so
-    -- the slide arcs around corners. A separate mini stuck-check runs inside the
-    -- slide: if the player stops moving (new wall corner blocking the slide target),
-    -- fan out angles from the current slide direction to find the new wall face and
-    -- re-steer. Uses force_move to override request_move's "already moving" guard.
+    -- Unstick: active when stuck_timeout detected oscillation or no-progress.
+    -- Let Batmobile free-explore to route around the obstacle.
     if stuck_timeout.slide_until > 0 and now < stuck_timeout.slide_until then
-        local player_s = get_local_player()
-        if player_s then
-            local spos      = player_s:get_position()
-            local remaining = stuck_timeout.slide_until - now
-
-            -- Initialise slide movement tracker on first tick of this slide
-            if task.slide_last_pos == nil then
-                task.slide_last_pos       = spos
-                task.slide_last_move_time = now
-            end
-
-            -- Check if we've moved enough since last sample
-            if spos:dist_to(task.slide_last_pos) >= SLIDE_STUCK_DIST then
-                task.slide_last_pos       = spos
-                task.slide_last_move_time = now
-            end
-
-            local slide_blocked = (now - task.slide_last_move_time) >= SLIDE_STUCK_TIME
-
-            if slide_blocked then
-                -- Fan angles from current slide direction to find a walkable exit.
-                -- Current slide direction as a unit vector:
-                local slide_target_ref = stuck_timeout.get_slide_target(spos)
-                local cur_dx = slide_target_ref:x() - spos:x()
-                local cur_dy = slide_target_ref:y() - spos:y()
-                local cur_len = math.sqrt(cur_dx * cur_dx + cur_dy * cur_dy)
-                if cur_len > 0.001 then cur_dx = cur_dx / cur_len; cur_dy = cur_dy / cur_len end
-
-                local found_dx, found_dy = nil, nil
-                for deg = SLIDE_FAN_STEP, SLIDE_FAN_MAX, SLIDE_FAN_STEP do
-                    for _, sign in ipairs({ 1, -1 }) do
-                        local rad = math.rad(deg * sign)
-                        local cos_r, sin_r = math.cos(rad), math.sin(rad)
-                        local tx = cur_dx * cos_r - cur_dy * sin_r
-                        local ty = cur_dx * sin_r + cur_dy * cos_r
-                        local probe = vec3:new(spos:x() + tx * SLIDE_PROBE_DIST,
-                                               spos:y() + ty * SLIDE_PROBE_DIST,
-                                               spos:z())
-                        probe = utility.set_height_of_valid_position(probe)
-                        if utility.is_point_walkeable(probe) then
-                            found_dx, found_dy = tx, ty
-                            break
-                        end
-                    end
-                    if found_dx then break end
-                end
-
-                if found_dx then
-                    -- Determine which perpendicular side this new direction is closest
-                    -- to so slide_dir stays meaningful for get_slide_target next tick.
-                    -- Cross product of boss-forward with found dir: positive = left.
-                    local bx = BOSS_POS:x() - spos:x()
-                    local by = BOSS_POS:y() - spos:y()
-                    local blen = math.sqrt(bx * bx + by * by)
-                    if blen > 0.001 then bx = bx / blen; by = by / blen end
-                    local cross = bx * found_dy - by * found_dx
-                    stuck_timeout.slide_dir = cross >= 0 and 1 or -1
-
-                    local new_target = vec3:new(spos:x() + found_dx * SLIDE_DIST,
-                                                spos:y() + found_dy * SLIDE_DIST,
-                                                spos:z())
-                    new_target = utility.set_height_of_valid_position(new_target)
-                    task.status = string.format('wall-slide re-steer (%.1fs, dir=%+d)', remaining, stuck_timeout.slide_dir)
-                    console.print(string.format('[GemFarmer] Wall-slide re-steering (blocked %.1fs) — new dir=%+d', now - task.slide_last_move_time, stuck_timeout.slide_dir))
-                    task.slide_last_pos       = spos
-                    task.slide_last_move_time = now
-                    BatmobilePlugin.pause(plugin_label)
-                    pathfinder.force_move(new_target)
-                else
-                    -- No walkable angle found — end slide early, let boss-progress
-                    -- guard handle abandonment if it persists
-                    console.print('[GemFarmer] Wall-slide: no walkable angle found — ending slide early')
-                    stuck_timeout.slide_until = -1
-                    task.slide_last_pos       = nil
-                    task.slide_last_move_time = -1
-                end
-            else
-                local slide_target = stuck_timeout.get_slide_target(spos)
-                task.status = string.format('wall-sliding (%.1fs, dir=%+d)', remaining, stuck_timeout.slide_dir)
-                BatmobilePlugin.pause(plugin_label)
-                pathfinder.request_move(slide_target)
-            end
-        end
-        -- Reset nav sample so stuck-check starts fresh after slide ends
+        task.status = string.format('unsticking (%.1fs)', stuck_timeout.slide_until - now)
+        BatmobilePlugin.resume(plugin_label)
+        BatmobilePlugin.update(plugin_label)
+        BatmobilePlugin.move(plugin_label)
         task.nav_sample_pos  = nil
         task.nav_sample_time = -1
         return
     end
     if stuck_timeout.slide_until > 0 and now >= stuck_timeout.slide_until then
-        -- Slide just finished
-        stuck_timeout.slide_until    = -1
-        task.slide_last_pos          = nil
-        task.slide_last_move_time    = -1
-        task.nav_sample_pos          = nil
-        task.nav_sample_time         = -1
-        console.print('[GemFarmer] Wall-slide done — resuming boss path')
+        stuck_timeout.slide_until = -1
+        task.nav_sample_pos  = nil
+        task.nav_sample_time = -1
+        console.print('[GemFarmer] Unstick done — resuming boss path')
     end
 
     if tracker.enter_time > 0 and (now - tracker.enter_time) < ENTRY_DELAY then
@@ -282,13 +181,10 @@ task.Execute = function()
     elseif (now - task.nav_sample_time) >= NAV_SAMPLE_INTERVAL then
         local units_moved = player_pos:dist_to(task.nav_sample_pos)
         if units_moved < NAV_STUCK_DIST then
-            console.print(string.format('[GemFarmer] Nav stuck (%.1f units in %.0fs) — starting wall-slide', units_moved, NAV_SAMPLE_INTERVAL))
-            stuck_timeout.slide_dir   = stuck_timeout.pick_slide_dir(player_pos)
+            console.print(string.format('[GemFarmer] Nav stuck (%.1f units in %.0fs) — unsticking', units_moved, NAV_SAMPLE_INTERVAL))
             stuck_timeout.slide_until = now + settings.slide_duration
-            task.slide_last_pos       = nil
-            task.slide_last_move_time = -1
-            task.nav_sample_pos       = nil
-            task.nav_sample_time      = -1
+            task.nav_sample_pos  = nil
+            task.nav_sample_time = -1
             return
         end
         task.nav_sample_pos  = player_pos

@@ -13,6 +13,7 @@ local settings = {
     soft_reset     = 30,
     hard_reset     = 150,
     roam_time      = 5,
+    slide_duration = 20,
     wall_detours   = true,
 }
 
@@ -32,8 +33,9 @@ settings.update_settings = function()
     settings.show_boss  = gui.elements.show_boss:get()
     settings.soft_reset = gui.elements.soft_reset:get()
     settings.hard_reset = gui.elements.hard_reset:get()
-    settings.roam_time    = gui.elements.roam_time:get()
-    settings.wall_detours = gui.elements.wall_detours:get()
+    settings.roam_time      = gui.elements.roam_time:get()
+    settings.slide_duration = gui.elements.slide_duration:get()
+    settings.wall_detours   = gui.elements.wall_detours:get()
 end
 
 return settings

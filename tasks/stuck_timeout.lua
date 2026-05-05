@@ -4,14 +4,14 @@ local world    = require 'core.world'
 
 -- No-progress stuck detection — thresholds read from settings each tick
 local MOVE_THRESHOLD     = 2.0   -- metres — minimum movement to not be "stuck"
-local UNSTICK_COOLDOWN   = 10.0  -- minimum seconds between unstick attempts
+local UNSTICK_COOLDOWN   = 6.0   -- minimum seconds between unstick attempts
 
 -- Wall-oscillation detection (player moves a lot but goes nowhere)
 local OSC_SAMPLE_RATE    = 0.20  -- seconds between position samples
-local OSC_WINDOW         = 5.0   -- seconds of history to analyse
+local OSC_WINDOW         = 3.0   -- seconds of history to analyse
 local OSC_TOTAL_MIN      = 10.0  -- min total distance moved to be considered "active"
 local OSC_NET_MAX        = 1.0   -- max net displacement to be considered "oscillating"
-local OSC_COOLDOWN       = 15.0  -- minimum seconds between oscillation fixes
+local OSC_COOLDOWN       = 8.0   -- minimum seconds between oscillation fixes
 
 local PLUGIN_LABEL = 'gem_farmer'
 
@@ -27,7 +27,7 @@ local BOSS_MAX_NO_PROGRESS   = 90.0  -- abandon after 90s of no progress toward 
 -- corners. SLIDE_DIST is how far ahead to aim; SLIDE_DURATION caps how long we
 -- slide before giving up and letting the boss-progress guard handle abandonment.
 local SLIDE_DIST     = 12.0  -- units ahead along the slide direction
-local SLIDE_DURATION = 8.0   -- seconds to slide before reverting to normal nav
+-- SLIDE_DURATION is read from settings.slide_duration each time a slide starts
 
 -- No-progress state
 local last_pos          = nil
@@ -115,7 +115,7 @@ function stuck_timeout.pick_slide_dir(player_pos)
 end
 
 local function do_unstick(now, reason, player_pos)
-    console.print(string.format('[GemFarmer] Wall unstick: %s — wall-sliding for %.0fs', reason, SLIDE_DURATION))
+    console.print(string.format('[GemFarmer] Wall unstick: %s — wall-sliding for %.0fs', reason, settings.slide_duration))
     tracker.healing_well_pos = nil
     tracker.escape_until     = -1  -- don't use the old pause; slide takes over immediately
     if BatmobilePlugin then
@@ -129,7 +129,7 @@ local function do_unstick(now, reason, player_pos)
 
     -- Pick slide direction based on what's walkable from here
     stuck_timeout.slide_dir   = stuck_timeout.pick_slide_dir(player_pos)
-    stuck_timeout.slide_until = now + SLIDE_DURATION
+    stuck_timeout.slide_until = now + settings.slide_duration
 end
 
 local function check_oscillation(now, player_pos)

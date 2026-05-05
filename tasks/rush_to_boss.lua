@@ -10,7 +10,7 @@ local WELL_INTERACT_RANGE = 6.0    -- metres — interact with healing well
 local BOSS_POS            = vec3:new(-5.1768, -3.9268, 2.0000)
 local BOSS_PATHFIND_DIST  = 20.0   -- switch to pathfinder within this range (narrow path)
 
-local NAV_SAMPLE_INTERVAL = 10.0   -- seconds between position snapshots
+local NAV_SAMPLE_INTERVAL = 6.0    -- seconds between position snapshots
 local NAV_STUCK_DIST      = 10.0   -- units — must have moved this far each interval or free-roam
 
 -- Wall zone A: X=[0,82] Y=[95,120] — stuck around Y~97-107, move right to X=95
@@ -191,7 +191,7 @@ task.Execute = function()
         if units_moved < NAV_STUCK_DIST then
             console.print(string.format('[GemFarmer] Nav stuck (%.1f units in %.0fs) — starting wall-slide', units_moved, NAV_SAMPLE_INTERVAL))
             stuck_timeout.slide_dir   = stuck_timeout.pick_slide_dir(player_pos)
-            stuck_timeout.slide_until = now + settings.roam_time
+            stuck_timeout.slide_until = now + settings.slide_duration
             task.nav_sample_pos  = nil
             task.nav_sample_time = -1
             return

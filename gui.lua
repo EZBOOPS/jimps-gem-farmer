@@ -24,6 +24,7 @@ gui.elements = {
     soft_reset     = slider_int:new(5, 120, 30,  get_hash(plugin_label .. '_soft_reset')),
     hard_reset     = slider_int:new(30, 600, 150, get_hash(plugin_label .. '_hard_reset')),
     roam_time      = slider_int:new(1, 30, 5,   get_hash(plugin_label .. '_roam_time')),
+    slide_duration = slider_int:new(5, 60, 20,  get_hash(plugin_label .. '_slide_duration')),
 
     wall_detours       = cb(true, 'wall_detours'),
 
@@ -59,6 +60,7 @@ gui.render = function()
         gui.elements.soft_reset:render('Soft reset (s)',    'Seconds without progress before attempting a nav unstick.')
         gui.elements.hard_reset:render('Hard reset (s)',    'Seconds without progress before abandoning the run entirely.')
         gui.elements.roam_time:render('Roam time (s)',      'Seconds of free roam after getting unstuck.')
+        gui.elements.slide_duration:render('Wall-slide duration (s)', 'Seconds to wall-slide when stuck against geometry.')
         gui.elements.wall_detours:render('Wall detours', 'Enable hardcoded wall zone detours inside the dungeon.')
         gui.elements.run_tree:pop()
     end

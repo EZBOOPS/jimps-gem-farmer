@@ -31,6 +31,9 @@ end
 task.Execute = function()
     if BatmobilePlugin == nil then return end
 
+    -- Ensure rotation is always active during boss fight regardless of rush settings
+    if UniversalRotationPlugin then UniversalRotationPlugin.enable() end
+
     local player = get_local_player()
     if not player then return end
     local player_pos = player:get_position()

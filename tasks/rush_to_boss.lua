@@ -82,11 +82,25 @@ task.shouldExecute = function()
     return world.is_inside() and not tracker.boss_found and not tracker.boss_dead
 end
 
+local function suppress_rotation()
+    if settings.disable_rotation_rush and UniversalRotationPlugin then
+        UniversalRotationPlugin.disable()
+    end
+end
+
+local function restore_rotation()
+    if UniversalRotationPlugin then
+        UniversalRotationPlugin.enable()
+    end
+end
+
 task.Execute = function()
     if BatmobilePlugin == nil then
         task.status = 'ERROR: BatmobilePlugin not loaded'
         return
     end
+
+    suppress_rotation()
 
     local now = get_time_since_inject()
 
@@ -137,6 +151,7 @@ task.Execute = function()
         tracker.boss_last_pos = boss:get_position()
         BatmobilePlugin.pause(plugin_label)
         pathfinder.request_move(player_pos)
+        restore_rotation()
         console.print('[GemFarmer] Boss detected — handing off to fight task')
         return
     end
@@ -171,6 +186,7 @@ task.Execute = function()
                 tracker.boss_found    = true
                 tracker.boss_last_pos = BOSS_POS
                 pathfinder.request_move(player_pos)
+                restore_rotation()
                 console.print('[GemFarmer] Arrived at boss area — forcing fight handoff')
                 return
             end

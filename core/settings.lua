@@ -12,8 +12,9 @@ local settings = {
     show_boss      = false,
     soft_reset     = 30,
     hard_reset     = 150,
-    roam_time      = 5,
-    slide_duration = 20,
+    roam_time              = 5,
+    slide_duration         = 20,
+    disable_rotation_rush  = false,
 }
 
 settings.get_keybind_state = function()
@@ -32,8 +33,9 @@ settings.update_settings = function()
     settings.show_boss  = gui.elements.show_boss:get()
     settings.soft_reset = gui.elements.soft_reset:get()
     settings.hard_reset = gui.elements.hard_reset:get()
-    settings.roam_time      = gui.elements.roam_time:get()
-    settings.slide_duration = gui.elements.slide_duration:get()
+    settings.roam_time             = gui.elements.roam_time:get()
+    settings.slide_duration        = gui.elements.slide_duration:get()
+    settings.disable_rotation_rush = gui.elements.disable_rotation_rush:get()
 end
 
 return settings

@@ -26,6 +26,8 @@ gui.elements = {
     roam_time      = slider_int:new(1, 30, 5,   get_hash(plugin_label .. '_roam_time')),
     slide_duration = slider_int:new(5, 60, 20,  get_hash(plugin_label .. '_slide_duration')),
 
+    disable_rotation_rush = cb(false, 'disable_rotation_rush'),
+
     dbg_tree           = tree_node:new(1),
     show_boss          = cb(false, 'show_boss'),
     dbg_coords         = cb(false, 'dbg_coords'),
@@ -60,6 +62,7 @@ gui.render = function()
         gui.elements.hard_reset:render('Hard reset (s)',    'Seconds without progress before abandoning the run entirely.')
         gui.elements.roam_time:render('Roam time (s)',      'Seconds of free roam after getting unstuck.')
         gui.elements.slide_duration:render('Wall-slide duration (s)', 'Seconds to wall-slide when stuck against geometry.')
+        gui.elements.disable_rotation_rush:render('Disable rotation while rushing', 'Pause UniversalRotation during the rush-to-boss phase. Rotation is always re-enabled for the boss fight.')
         gui.elements.run_tree:pop()
     end
 

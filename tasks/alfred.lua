@@ -3,53 +3,61 @@ local world   = require 'core.world'
 
 local plugin_label = 'gem_farmer'
 
-local task = {
-    name    = 'alfred',
-    status  = 'idle',
-    running = false,
+local status_enum = {
+    IDLE    = 'idle',
+    WAITING = 'waiting for alfred to finish',
 }
 
-local function on_alfred_done()
-    task.running = false
-    task.status  = 'idle'
+local task = {
+    name   = 'alfred',
+    status = status_enum.IDLE,
+}
+
+local function alfred_plugin()
+    return _G.AlfredTheButlerPlugin or _G.PLUGIN_alfred_the_butler
+end
+
+local function reset()
+    local a = alfred_plugin()
+    if a then a.pause(plugin_label) end
+    task.status = status_enum.IDLE
     console.print('[GemFarmer] Alfred finished — resuming farming')
 end
 
--- Reset if tracker clears between runs
 local _orig_reset = tracker.reset_run
 tracker.reset_run = function()
     _orig_reset()
-    if task.running then
-        if AlfredTheButlerPlugin then AlfredTheButlerPlugin.pause(plugin_label) end
-        task.running = false
-        task.status  = 'idle'
+    if task.status == status_enum.WAITING then
+        local a = alfred_plugin()
+        if a then a.pause(plugin_label) end
+        task.status = status_enum.IDLE
     end
 end
 
 task.shouldExecute = function()
-    -- Keep executing until Alfred calls the done callback
-    if task.running then return true end
-
-    -- Only trigger when outside the dungeon
+    if task.status == status_enum.WAITING then return true end
     if not world.is_outside() then return false end
-    if not AlfredTheButlerPlugin then return false end
-
-    local status = AlfredTheButlerPlugin.get_status()
-    if not status or not status.enabled then return false end
-
-    return status.need_trigger or status.inventory_full or status.need_repair
+    local a = alfred_plugin()
+    if not a then return false end
+    local st = a.get_status()
+    if not st or not st.enabled then return false end
+    return st.need_trigger or st.inventory_full or st.need_repair
 end
 
 task.Execute = function()
-    if not task.running then
-        task.running = true
-        AlfredTheButlerPlugin.resume()
-        AlfredTheButlerPlugin.trigger_tasks_with_teleport(plugin_label, on_alfred_done)
-        task.status = 'triggered'
+    if task.status == status_enum.IDLE then
+        local a = alfred_plugin()
+        if a then
+            a.resume()
+            a.trigger_tasks_with_teleport(plugin_label, reset)
+        end
+        task.status = status_enum.WAITING
         console.print('[GemFarmer] Yielding to Alfred for inventory management')
-        return
     end
-    task.status = 'waiting for alfred to finish'
 end
+
+-- Clear any stale paused state from a prior session
+local _a = alfred_plugin()
+if _a then _a.pause(plugin_label) end
 
 return task

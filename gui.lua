@@ -26,10 +26,9 @@ gui.elements = {
     roam_time      = slider_int:new(1, 30, 5,   get_hash(plugin_label .. '_roam_time')),
     slide_duration = slider_int:new(5, 60, 20,  get_hash(plugin_label .. '_slide_duration')),
 
-    wall_detours       = cb(true, 'wall_detours'),
-
     dbg_tree           = tree_node:new(1),
     show_boss          = cb(false, 'show_boss'),
+    dbg_coords         = cb(false, 'dbg_coords'),
     dbg_zone           = cb(false, 'dbg_zone'),
     dbg_pos            = cb(false, 'dbg_pos'),
     dbg_interactables  = cb(false, 'dbg_interactables'),
@@ -61,12 +60,12 @@ gui.render = function()
         gui.elements.hard_reset:render('Hard reset (s)',    'Seconds without progress before abandoning the run entirely.')
         gui.elements.roam_time:render('Roam time (s)',      'Seconds of free roam after getting unstuck.')
         gui.elements.slide_duration:render('Wall-slide duration (s)', 'Seconds to wall-slide when stuck against geometry.')
-        gui.elements.wall_detours:render('Wall detours', 'Enable hardcoded wall zone detours inside the dungeon.')
         gui.elements.run_tree:pop()
     end
 
     if gui.elements.dbg_tree:push('Debug') then
         gui.elements.show_boss:render('Show boss marker', 'Draw a red circle at the last known boss position.')
+        gui.elements.dbg_coords:render('Show coords overlay', 'Display live X/Y/Z and boss direction on screen.')
         gui.elements.dbg_zone:render('Print zone name to console', 'Check to print current zone info. Auto-unchecks.')
         if gui.elements.dbg_zone:get() then
             gui.elements.dbg_zone:set(false)

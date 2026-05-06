@@ -14,7 +14,6 @@ local settings = {
     hard_reset     = 150,
     roam_time      = 5,
     slide_duration = 20,
-    wall_detours   = true,
 }
 
 settings.get_keybind_state = function()
@@ -35,7 +34,6 @@ settings.update_settings = function()
     settings.hard_reset = gui.elements.hard_reset:get()
     settings.roam_time      = gui.elements.roam_time:get()
     settings.slide_duration = gui.elements.slide_duration:get()
-    settings.wall_detours   = gui.elements.wall_detours:get()
 end
 
 return settings

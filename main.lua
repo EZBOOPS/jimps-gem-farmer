@@ -4,6 +4,10 @@ local task_manager = require 'core.task_manager'
 local tracker      = require 'core.tracker'
 local external     = require 'core.external'
 local stuck        = require 'tasks.stuck_timeout'
+local world        = require 'core.world'
+
+local BOSS_POS = vec3:new(-5.1768, -3.9268, 2.0000)
+local dbg_last_print = -1
 
 local local_player
 
@@ -41,6 +45,33 @@ local function render_pulse()
         end
         local x = get_screen_width() / 2 - (#msg * 5.5)
         graphics.text_2d(msg, vec2:new(x, 80), 20, color_white(255))
+    end
+
+    if gui.elements.dbg_coords:get() and world.is_inside() then
+        local pos = local_player:get_position()
+        local px, py, pz = pos:x(), pos:y(), pos:z()
+        local dx = BOSS_POS:x() - px
+        local dy = BOSS_POS:y() - py
+        local dist = math.sqrt(dx * dx + dy * dy)
+        local now = get_time_since_inject()
+        local lines = {
+            string.format('X: %.2f', px),
+            string.format('Y: %.2f', py),
+            string.format('Z: %.2f', pz),
+            string.format('Boss dX: %+.1f', dx),
+            string.format('Boss dY: %+.1f', dy),
+            string.format('Boss dist: %.1fm', dist),
+        }
+        local sw = get_screen_width()
+        for i, line in ipairs(lines) do
+            graphics.text_2d(line, vec2:new(sw - 180, 100 + (i - 1) * 22), 18, color_white(255))
+        end
+        -- Also print to console once per second
+        if (now - dbg_last_print) >= 1.0 then
+            dbg_last_print = now
+            console.print(string.format('[GemFarmer] pos=(%.2f, %.2f, %.2f)  boss_dX=%+.1f  boss_dY=%+.1f  dist=%.1f',
+                px, py, pz, dx, dy, dist))
+        end
     end
 end
 
